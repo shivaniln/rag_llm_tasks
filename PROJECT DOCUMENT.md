@@ -120,18 +120,11 @@ Key dependencies include Elasticsearch, GeoPandas, NumPy, NetworkX, PyProj, scik
 
 ### 3.1 Service Endpoints
 
-
-
 | Service | Local URL | Port |
-
 |---|---|---:|
-
 | Elasticsearch | `http://localhost:9200` | 9200 |
-
 | Kibana | `http://localhost:5601` | 5601 |
-
 | GeoServer | `http://localhost:8080/geoserver` | 8080 |
-
 | Ollama API | `http://localhost:11434` | 11434 |
 
 
@@ -406,37 +399,21 @@ The application must use the restricted API key rather than the `elastic` superu
 
 ### 5.1 Environment and Security Tests
 
-
-
 | Check | Result |
-
 |---|---|
-
 | Elasticsearch authentication | Passed |
-
 | Single-node cluster health | Yellow; no unassigned primary shards |
-
 | Restricted API key can search its permitted index | Passed |
-
 | Restricted API key cannot access cluster health | Passed; HTTP 403 |
-
 | Restricted API key cannot search an unrelated index | Passed; HTTP 403 |
-
 | `.env` ignored by Git | Passed |
-
 | `.env` not tracked by Git | Passed |
-
 | Offline local language model response | Passed |
-
 | Both embedding models load successfully | Passed |
-
 | Cross-encoder reranker produces a score | Passed |
-
 | Anonymous GeoServer access refused | Passed; HTTP 401 |
-
 | Authenticated GeoServer WFS GeoJSON request | Passed |
-
-| GeoServer write attempt by `rag\_geo` | Rejected |
+| GeoServer write attempt by `rag_geo` | Rejected |
 
 
 
