@@ -1,628 +1,234 @@
-﻿# East India Geo-Assistant
+# East India Geo-Assistant: Project Document
 
+## 1. Overview
 
+The East India Geo-Assistant is a proof of concept (PoC) for a local Retrieval-Augmented Generation (RAG) system. It answers questions about school admissions and geography using document passages and geospatial data served through GeoServer. Everything runs locally on Windows with free and open-source software.
 
-## 1. Project Overview
+Components: Elasticsearch (indexing and retrieval), a local language model via Ollama (generation), two embedding models (semantic search), a cross-encoder (reranking), and GeoServer (geographic features).
 
-
-
-The East India Geo-Assistant is a proof of concept (PoC) for a local Retrieval-Augmented Generation (RAG) system. It is designed to answer questions about school admissions and geography using document-based information and geospatial data served through GeoServer.
-
-
-
-The system uses Elasticsearch for indexing and retrieval, a locally running language model for generation, embedding models for semantic search, a cross-encoder for reranking, and GeoServer for accessing geographic features.
-
-
-
-### Objectives
-
-
-
-- Prepare a local development environment for RAG.
-
-- Secure Elasticsearch and GeoServer access.
-
-- Load and evaluate local language and retrieval models.
-
-- Make school, road, and land-use data available through GeoServer.
-
-- Develop an ingestion and retrieval pipeline with evidence-based answers.
-
-- Evaluate retrieval quality, confidence, and answer reliability.
-
-
-
-### Execution Environment
-
-
-
-- Operating system: Windows
-
-- Project directory: `C:\\geoassistant`
-
+- Project directory: `C:\geoassistant`
 - Python virtual environment: `.venv`
-
 - Elasticsearch and Kibana: Docker Compose
 
-- Language model runtime: Ollama
+## 2. Completion Status
 
-- Geospatial server: GeoServer
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Area</th><th>Status</th></tr>
+<tr><td>Task 1: environment, security, models, GeoServer</td><td>Completed and verified (section 5)</td></tr>
+<tr><td>Task 2: entity extraction and evaluation</td><td>Not completed. No gold entity file was available</td></tr>
+<tr><td>Task 3: embedding comparison, index tuning, approximate-vs-exact, paging</td><td>Not completed as a formal evaluation. Embeddings and a 39-chunk index exist and are used by the pipeline</td></tr>
+<tr><td>Task 4: graph relations</td><td>Partial. Spatial school-to-road proximity relations exist. Text-based relations, graph measures and <code>expand()</code> in retrieval are not completed</td></tr>
+<tr><td>Task 5: retrieval metrics, k choice, tuning</td><td>Not completed. No labelled retrieval judgments were available</td></tr>
+<tr><td>Task 6: reranking evaluation</td><td>Not completed as an evaluation. A cross-encoder is used in the pipeline</td></tr>
+<tr><td>Task 7: calibration, abstention threshold, sampling consistency</td><td>Not completed. No labelled calibration or development questions were available. A fallback threshold of 0.5 is used</td></tr>
+<tr><td>Task 8: pipeline, safety, interface</td><td>Implemented. Evaluation on ten development questions not completed (section 7)</td></tr>
+</table>
 
+Reason for the gaps: the evaluation files (`gold_entities.jsonl`, `retrieval_judgments.jsonl`, `calibration_questions.jsonl`, `dev_questions.jsonl`), the document corpus, and separate roads and landuse files were not among the materials available during setup.
 
+## 3. Software, Models and Ports
 
+### 3.1 Software
 
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Component</th><th>Version / configuration</th></tr>
+<tr><td>Operating system</td><td>Windows</td></tr>
+<tr><td>Python</td><td>3.12.10</td></tr>
+<tr><td>Elasticsearch</td><td>8.19.0 (single node, 1 GB initial and maximum heap)</td></tr>
+<tr><td>Kibana</td><td>8.19.0</td></tr>
+<tr><td>GeoServer</td><td>3.0.1 (JDK 17)</td></tr>
+<tr><td>Ollama</td><td>0.40.4</td></tr>
+<tr><td>Docker Engine / Desktop</td><td>29.8.2 / 4.94.0</td></tr>
+</table>
 
-## 2. Software Versions and Models
+Pinned Python dependencies are in `requirements.txt` (`pip freeze`). Key libraries: Elasticsearch client, GeoPandas, NumPy, NetworkX, PyProj, scikit-learn, Sentence Transformers, Shapely, Streamlit, PyTorch.
 
+### 3.2 Language model
 
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>Model</td><td><code>qwen2.5:3b</code></td></tr>
+<tr><td>Parameters</td><td>approximately 3 billion</td></tr>
+<tr><td>Quantisation</td><td>Q4_K_M</td></tr>
+<tr><td>Context length</td><td>32,768 tokens (model configuration); 4,096 active during the test</td></tr>
+<tr><td>Model size</td><td>approximately 2.2 GB</td></tr>
+<tr><td>Generation speed</td><td>approximately 16.43 tokens/second</td></tr>
+<tr><td>Prompt evaluation speed</td><td>approximately 55.26 tokens/second</td></tr>
+<tr><td>Execution</td><td>Local through Ollama, on CPU</td></tr>
+</table>
 
-### 2.1 Software Environment
+Local inference was tested with the internet disconnected.
 
-| Component | Version / Configuration |
-|---|---|
-| Operating system | Windows |
-| Python | 3.12.10 |
-| Elasticsearch | 8.19.0 |
-| Kibana | 8.19.0 |
-| GeoServer | 3.0.1 |
-| Ollama | 0.40.4 |
-| Docker Engine | 29.8.2 |
-| Docker Desktop | 4.94.0 |
-| Python environment | `.venv` |
-| Elasticsearch JVM heap | 1 GB initial and maximum heap |
+### 3.3 Embedding and reranking models
 
-### 2.2 Local Language Model
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Model</th><th>Purpose</th><th>Output</th></tr>
+<tr><td><code>sentence-transformers/all-MiniLM-L6-v2</code></td><td>Embeddings</td><td>384-dimensional vectors</td></tr>
+<tr><td><code>intfloat/e5-small-v2</code></td><td>Embeddings</td><td>384-dimensional vectors</td></tr>
+<tr><td><code>cross-encoder/ms-marco-MiniLM-L-6-v2</code></td><td>Reranking</td><td>Raw relevance score (a test pair returned -9.120125)</td></tr>
+</table>
 
-| Property | Value |
-|---|---|
-| Model | `qwen2.5:3b` |
-| Parameter count | Approximately 3 billion |
-| Quantisation | Q4_K_M |
-| Context length | 32,768 tokens (model configuration) |
-| Active context during test | 4,096 tokens |
-| Model size | Approximately 2.2 GB |
-| Generation speed | Approximately 16.43 tokens/second |
-| Prompt evaluation speed | Approximately 55.26 tokens/second |
-| Execution | Local through Ollama, CPU |
+The cross-encoder score is a raw logit, not a calibrated probability. A sigmoid is needed to turn it into a 0 to 1 value. E5 models expect `query: ` and `passage: ` prefixes.
 
-The model was tested with the internet disconnected to verify that local inference works without an external AI API.
+These models were used because the supplied model identifiers were not found in the materials reviewed during setup.
 
-### 2.3 Embedding and Reranking Models
+### 3.4 Ports
 
-| Model | Purpose | Output |
-|---|---|---|
-| `sentence-transformers/all-MiniLM-L6-v2` | Text embeddings | 384-dimensional vectors |
-| `intfloat/e5-small-v2` | Text embeddings | 384-dimensional vectors |
-| `cross-encoder/ms-marco-MiniLM-L-6-v2` | Reranking | Raw relevance score |
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Service</th><th>URL</th><th>Port</th></tr>
+<tr><td>Elasticsearch</td><td><code>http://localhost:9200</code></td><td>9200</td></tr>
+<tr><td>Kibana</td><td><code>http://localhost:5601</code></td><td>5601</td></tr>
+<tr><td>GeoServer</td><td><code>http://localhost:8080/geoserver</code></td><td>8080</td></tr>
+<tr><td>Ollama API</td><td><code>http://localhost:11434</code></td><td>11434</td></tr>
+</table>
 
+## 4. Start-up Commands
 
-The models loaded successfully in Python. The cross-encoder test returned a score of `-9.120125`. This is a raw score, not a calibrated probability.
-
-
-
-### 2.4 Python Dependencies
-
-
-
-Python dependencies and their pinned versions are recorded in `requirements.txt`, generated using `pip freeze`.
-
-
-
-Key dependencies include Elasticsearch, GeoPandas, NumPy, NetworkX, PyProj, scikit-learn, Sentence Transformers, Shapely, Streamlit, and PyTorch.
-
-
-
-
-
-## 3. Service Ports and Startup Commands
-
-
-
-### 3.1 Service Endpoints
-
-| Service | Local URL | Port |
-|---|---|---:|
-| Elasticsearch | `http://localhost:9200` | 9200 |
-| Kibana | `http://localhost:5601` | 5601 |
-| GeoServer | `http://localhost:8080/geoserver` | 8080 |
-| Ollama API | `http://localhost:11434` | 11434 |
-
-
-
-### 3.2 Start Elasticsearch and Kibana
-
-
-
-Open PowerShell and navigate to the project directory:
-
-
+**Elasticsearch and Kibana** (passwords are entered at a prompt and never stored in files):
 
 ```powershell
-
-cd C:\\geoassistant
-
-```
-
-
-
-Set the Elasticsearch and Kibana passwords as environment variables using secure prompts. Do not place password values in source files.
-
-
-
-```powershell
-
+cd C:\geoassistant
 $secure = Read-Host "Enter Elasticsearch password" -AsSecureString
-
-$env:ELASTIC\_PASSWORD = \[System.Net.NetworkCredential]::new("", $secure).Password
-
-
-
+$env:ELASTIC_PASSWORD = [System.Net.NetworkCredential]::new("", $secure).Password
 $secure = Read-Host "Enter Kibana password" -AsSecureString
-
-$env:KIBANA\_PASSWORD = \[System.Net.NetworkCredential]::new("", $secure).Password
-
-
-
+$env:KIBANA_PASSWORD = [System.Net.NetworkCredential]::new("", $secure).Password
 Remove-Variable secure
-
 docker compose up -d
-
-```
-
-
-
-Check the running containers:
-
-
-
-```powershell
-
 docker compose ps
-
 ```
 
+Set these variables again in every new PowerShell session before starting the services.
 
-
-These environment variables must be set again in a new PowerShell session before starting the services if they are not otherwise configured.
-
-
-
-### 3.3 Start the Python Environment
-
-
+**Python environment:**
 
 ```powershell
-
-cd C:\\geoassistant
-
-.\\.venv\\Scripts\\Activate.ps1
-
-```
-
-
-
-Install pinned dependencies if setting up the project on a new environment:
-
-
-
-```powershell
-
+cd C:\geoassistant
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
 ```
 
-
-
-### 3.4 Start GeoServer
-
-
-
-GeoServer 3.0.1 was extracted to `C:\\geoserver-extract`.
-
-
-
-Open a separate PowerShell terminal and run:
-
-
+**GeoServer** (extracted to `C:\geoserver-extract`, separate terminal, keep open):
 
 ```powershell
-
-$env:JAVA\_HOME = "C:\\Program Files\\Java\\jdk-17"
-
-$env:GEOSERVER\_HOME = "C:\\geoserver-extract"
-
-$env:GEOSERVER\_DATA\_DIR = "C:\\geoserver-extract\\data\_dir"
-
-
-
-Set-Location C:\\geoserver-extract\\bin
-
-.\\startup.bat
-
+$env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
+$env:GEOSERVER_HOME = "C:\geoserver-extract"
+$env:GEOSERVER_DATA_DIR = "C:\geoserver-extract\data_dir"
+Set-Location C:\geoserver-extract\bin
+.\startup.bat
 ```
 
-
-
-Keep the terminal open while GeoServer is running.
-
-
-
-### 3.5 Start Ollama
-
-
-
-Ensure Ollama is running on the local machine. Start it if necessary:
-
-
+**Ollama:**
 
 ```powershell
-
 ollama serve
-
+ollama run qwen2.5:3b
 ```
 
-
-
-In another terminal, run the local model:
-
-
+**Interface:**
 
 ```powershell
-
-ollama run qwen2.5:3b
-
+streamlit run app/ui.py
 ```
 
+## 5. Task 1: Environment and Security Results
 
+### 5.1 Cluster health
 
-Ollama exposes its local API on port 11434 by default.
+The single-node cluster status is **yellow** with no unassigned primary shards. Each index has one primary shard and, by default, one replica. A replica cannot be placed on the same node as its primary, so the replica stays unassigned. Data is complete, but there is no redundancy. Setting `number_of_replicas` to 0 on an index would make it green.
 
+### 5.2 Index naming
 
+Elasticsearch does not allow spaces or capital letters in index names. The three indices from the brief are therefore named `east_india_chunks`, `east_india_entities` and `east_india_relations`.
 
+### 5.3 Access control
 
+- Elasticsearch security is enabled. The role `rag_app` and API key `rag_app_key` are for application access to the three indices above only. The application uses this key, not the `elastic` superuser.
+- GeoServer has the workspace `east_india` with layers `schools`, `roads` and `landuse`. The user `rag_geo` has read access to the workspace.
+- Secrets are kept in `.env`, which is listed in `.gitignore`. `git check-ignore .env` confirmed it is ignored and `git ls-files .env` returned nothing, so it is not tracked.
 
-## 4. Data Sources and Security
+### 5.4 Verification results
 
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Check</th><th>Result</th></tr>
+<tr><td>Elasticsearch authentication</td><td>Passed</td></tr>
+<tr><td>API key searches its permitted index <code>east_india_chunks</code></td><td>Passed</td></tr>
+<tr><td>API key on cluster health</td><td>Refused (HTTP 403)</td></tr>
+<tr><td>API key on an unrelated index</td><td>Refused (HTTP 403)</td></tr>
+<tr><td><code>.env</code> ignored and not tracked by Git</td><td>Passed</td></tr>
+<tr><td>Language model answers offline</td><td>Passed</td></tr>
+<tr><td>Both embedding models load, 384-dimensional output</td><td>Passed</td></tr>
+<tr><td>Cross-encoder returns a score</td><td>Passed</td></tr>
+<tr><td>Anonymous GeoServer request</td><td>Refused (HTTP 401)</td></tr>
+<tr><td>Authenticated WFS request returns GeoJSON</td><td>Passed</td></tr>
+<tr><td>Write attempt by <code>rag_geo</code></td><td>Rejected</td></tr>
+</table>
 
+Measurements are specific to the tested machine and may vary between runs.
 
-### 4.1 Data Sources
+## 6. Data Provenance
 
+**Schools (supplied):** `schools.gpkg`, GeoPackage, EPSG:4326, 1,062 features, MultiPolygon geometry, attributes `osm_id`, `code`, `fclass`, `name`, `type`, `geometry`. These are OpenStreetMap building footprints classified as schools. The file has no board, seat availability or cut-off information.
 
+**Roads and land use (substituted):** separate files for these layers were not available during setup, so they were extracted from a Geofabrik OpenStreetMap dataset. `roads.gpkg` has approximately 1,516,111 features and `landuse.gpkg` approximately 89,730. Both are published in the `east_india` GeoServer workspace.
 
-\*\*School data\*\*
+Attribution: © OpenStreetMap contributors (Open Database License).
 
+## 7. Task 8: Pipeline, Safety and Interface
 
+### 7.1 Pipeline
 
-- Source: `schools.gpkg`
+`app/pipeline.py` connects entity extraction, hybrid retrieval, cross-encoder reranking, confidence signals and generation with the local model through Ollama. It returns JSON containing the answer, citations, confidence, entities used, graph paths and settings.
 
-- Format: GeoPackage
+### 7.2 Grounded generation and citations
 
-- Coordinate reference system: EPSG:4326
+The prompt tells the model to answer only from retrieved sources and to treat their contents as untrusted data. The response is parsed as JSON and each cited chunk ID is checked against the retrieved chunk IDs. If a citation was not retrieved, the pipeline abstains rather than returning the answer.
 
-- Features: 1,062
+### 7.3 Abstention and safety
 
-- Geometry: MultiPolygon
+The pipeline abstains when no candidates are found or when confidence is below the threshold. The threshold of 0.5 is a temporary fallback. It is **not calibrated**, because no labelled calibration questions were available. Requests matching basic rules for data modification or secret disclosure are rejected.
 
-- Attributes: `osm\_id`, `code`, `fclass`, `name`, `type`, and `geometry`
+### 7.4 Smoke test
 
-- The dataset contains OpenStreetMap building footprints classified as schools. It does not contain school board, seat availability, or admission cut-off information.
+The question "What is the East India Geo-Assistant assessment?" returned an answer describing the assessment, citing retrieved chunk `e51f23cd53fdb6ee8188`. The confidence was about 0.998. This value is uncalibrated and is not a verified probability of correctness. The question is also answered by the same document that was indexed, so it is an easy case.
 
+### 7.5 Interface
 
+`app/ui.py` is a Streamlit interface showing the answer, confidence, citations, entities, graph paths and settings.
 
-\*\*Road and land-use data\*\*
+## 8. Algorithm Notes
 
+<table border="1" cellpadding="6" cellspacing="0">
+<tr><th>Algorithm</th><th>Explanation</th><th>Where it is used</th></tr>
+<tr><td>BM25</td><td>Lexical ranking from query-term frequency, inverse document frequency and document-length normalisation</td><td>Keyword part of the hybrid retrieval over <code>east_india_chunks</code></td></tr>
+<tr><td>HNSW</td><td>Approximate nearest-neighbour search over a layered graph of vectors, avoiding comparison with every vector. Accuracy and latency depend on build and search parameters</td><td>Vector search through Elasticsearch <code>dense_vector</code> indexing (384 dimensions). Its parameters were not tuned or compared</td></tr>
+<tr><td>Reciprocal Rank Fusion</td><td>Combines rankings by summing 1/(constant + rank) per list, so lexical and vector scores need no common scale</td><td>Fusion of keyword and vector lists in the hybrid mode. The constant was not tuned</td></tr>
+<tr><td>Cross-encoder</td><td>Reads query and passage together and scores the pair. More accurate than a bi-encoder but needs one pass per pair, so it is applied only to a shortlist</td><td>Reranking in <code>app/pipeline.py</code> with <code>ms-marco-MiniLM-L-6-v2</code>. Its raw score feeds the confidence signals</td></tr>
+<tr><td>Softmax with temperature</td><td>Converts scores to normalised values. Lower temperature gives a sharper distribution and higher gives a flatter one. The outputs are not automatically calibrated confidence</td><td>Not used for calibration, since temperature scaling was not completed</td></tr>
+<tr><td>Greedy decoding</td><td>Picks the highest-probability token at each step, giving repeatable output for fixed inputs. Repeatable does not mean correct</td><td>Language-model generation settings in the pipeline</td></tr>
+<tr><td>Graph traversal</td><td>Follows relations between entities, with cycle detection and fan-out limits to avoid repeated or very large searches</td><td>A school-road proximity graph exists. Traversal and expansion are not integrated into retrieval</td></tr>
+</table>
 
+## 9. Evaluation Status and Limitations
 
-Road and land-use features were extracted from a Geofabrik OpenStreetMap dataset because separate assessment datasets for these layers were unavailable during setup.
+- The text corpus holds 39 chunks from the assessment PDF only. It has no admissions circulars, so the system cannot yet answer real admission questions.
+- No valid development questions, calibration questions or retrieval judgments were available. Therefore these are **not done**: the ten-question accuracy evaluation, retrieval metrics (precision, recall, MRR, nDCG), calibration (ECE, Brier), the abstention threshold, and the failure analysis with a fix.
+- The entity extractors, entity resolution and `east_india_entities` index are not completed. The graph has only spatial school-road relations.
+- The school data has no board, seats or cut-off, so questions on these cannot be answered from the data.
+- Roads and land use are substituted OpenStreetMap data, and the road layer is very large (about 1.5 million features).
+- The 3-billion-parameter local model runs on CPU at about 16 tokens/second and can still produce unsupported answers.
 
+**Next steps with more time and data:** obtain or build a document corpus and labelled evaluation files, complete Tasks 2 to 7 with measured results, integrate graph expansion into retrieval, and calibrate the abstention threshold.
 
+## 10. Disclosures
 
-- `roads.gpkg`: approximately 1,516,111 features
+- **Software:** Python, Elasticsearch, Kibana, GeoServer, Ollama, Docker, GeoPandas, NumPy, NetworkX, PyProj, scikit-learn, Sentence Transformers, Shapely, Streamlit, PyTorch. Exact versions are in `requirements.txt`.
+- **Models:** `qwen2.5:3b`, `sentence-transformers/all-MiniLM-L6-v2`, `intfloat/e5-small-v2`, `cross-encoder/ms-marco-MiniLM-L-6-v2`.
+- **Data:** `schools.gpkg` (supplied). Roads and land use from Geofabrik OpenStreetMap extracts. Attribution: © OpenStreetMap contributors.
+- **AI assistance:** an AI assistant (Claude) was used for environment setup, troubleshooting, command guidance and drafting documentation. The author reviewed the implementation and is responsible for it.
+- **Secrets:** no passwords or API keys are included in submitted files. They are held in environment variables or `.env`, which is excluded from Git.
 
-- `landuse.gpkg`: approximately 89,730 features
+## 11. References
 
-
-
-These datasets are provided through the `east\_india` GeoServer workspace.
-
-
-
-### 4.2 GeoServer Access
-
-
-
-GeoServer is configured with the `east\_india` workspace and the following published layers:
-
-
-
-- `east\_india:schools`
-
-- `east\_india:roads`
-
-- `east\_india:landuse`
-
-
-
-The `rag\_geo` user has read access to the workspace layers. Unauthenticated access was tested and refused, while authenticated WFS requests successfully returned GeoJSON.
-
-
-
-Write access is not granted to `rag\_geo`; a WFS update attempt was rejected.
-
-
-
-### 4.3 Elasticsearch Access
-
-
-
-Elasticsearch security is enabled. The `rag\_app` role and `rag\_app\_key` are intended for application access to the following indices only:
-
-
-
-- `east\_india\_chunks`
-
-- `east\_india\_entities`
-
-- `east\_india\_relations`
-
-
-
-The API key successfully searched the permitted `east\_india\_chunks` index. Attempts to access cluster health and search an unrelated index returned HTTP 403 Forbidden.
-
-
-
-The application must use the restricted API key rather than the `elastic` superuser.
-
-
-
-### 4.4 Secret Management
-
-
-
-- Credentials and the Elasticsearch API key are stored in `.env`.
-
-- `.env` is listed in `.gitignore`.
-
-- `git check-ignore .env` confirmed that the file is ignored.
-
-- `git ls-files .env` returned no results, confirming that `.env` is not tracked by Git.
-
-- Actual passwords, API-key secrets, and other credentials must never be included in submitted documentation or source files.
-
-
-
-
-
-## 5. Verification Results and Current Limitations
-
-
-
-### 5.1 Environment and Security Tests
-
-| Check | Result |
-|---|---|
-| Elasticsearch authentication | Passed |
-| Single-node cluster health | Yellow; no unassigned primary shards |
-| Restricted API key can search its permitted index | Passed |
-| Restricted API key cannot access cluster health | Passed; HTTP 403 |
-| Restricted API key cannot search an unrelated index | Passed; HTTP 403 |
-| `.env` ignored by Git | Passed |
-| `.env` not tracked by Git | Passed |
-| Offline local language model response | Passed |
-| Both embedding models load successfully | Passed |
-| Cross-encoder reranker produces a score | Passed |
-| Anonymous GeoServer access refused | Passed; HTTP 401 |
-| Authenticated GeoServer WFS GeoJSON request | Passed |
-| GeoServer write attempt by `rag_geo` | Rejected |
-
-
-
-### 5.2 Model Test Results
-
-
-
-The local language model produced a response with the internet disconnected. The measured prompt evaluation speed was approximately 55.26 tokens per second, and generation speed was approximately 16.43 tokens per second.
-
-
-
-Both embedding models produced 384-dimensional vectors. The cross-encoder produced a raw score of `-9.120125` in the test.
-
-
-
-These measurements are specific to the tested machine and configuration and may vary between runs.
-
-
-
-### 5.3 Current Limitations
-
-
-
-The supplied school dataset contains geographic building footprints and basic OpenStreetMap attributes, not admissions information such as board, available seats, or cut-off marks.
-
-
-
-Road and land-use datasets were substituted with data extracted from OpenStreetMap because the corresponding assessment datasets were unavailable during setup. This substitution must be disclosed in the final submission.
-
-
-
-The environment and access-control checks do not by themselves demonstrate a complete RAG application. Entity extraction, entity resolution, vector ingestion and evaluation, graph relationships, retrieval modes, reranking evaluation, confidence calibration, and end-to-end answer generation remain to be implemented and tested.
-
-
-
-
-
-## 6. Algorithm Notes
-
-
-
-The following algorithms are relevant to the planned RAG pipeline. Their implementation and evaluation must be completed and verified before the final submission.
-
-
-
-### 6.1 BM25
-
-
-
-BM25 is a lexical retrieval algorithm that ranks documents using query-term frequency, inverse document frequency, and document-length normalization. It is used to find passages containing terms relevant to a query.
-
-
-
-### 6.2 HNSW
-
-
-
-Hierarchical Navigable Small World (HNSW) is an approximate nearest-neighbour search algorithm. It organizes vectors into a navigable graph to find similar vectors efficiently without comparing every vector in the index. Its search accuracy and latency depend on index and search parameters.
-
-
-
-### 6.3 Reciprocal Rank Fusion
-
-
-
-Reciprocal Rank Fusion (RRF) combines rankings from multiple retrieval methods. Each result receives a contribution based on its rank in each list, allowing lexical and semantic retrieval results to be combined without requiring their raw scores to share the same scale.
-
-
-
-### 6.4 Cross-Encoder
-
-
-
-A cross-encoder processes a query and a candidate passage together and produces a relevance score. It can improve candidate ordering after initial retrieval, but scoring candidates individually is more expensive than retrieving them using a vector index.
-
-
-
-### 6.5 Softmax with Temperature
-
-
-
-Softmax converts a set of scores into normalized values. Temperature controls how concentrated or distributed those values are: lower temperatures produce sharper distributions, while higher temperatures produce flatter distributions. Such values should not automatically be interpreted as calibrated confidence.
-
-
-
-### 6.6 Greedy Decoding
-
-
-
-Greedy decoding selects the highest-scoring next token at each generation step. It is deterministic for fixed inputs and settings when the model and runtime behave deterministically. It is useful for repeatable extraction and answer-generation experiments.
-
-
-
-### 6.7 Graph Traversal
-
-
-
-Graph traversal follows relationships between entities, such as a school and a locality or a school and a relevant rule. Traversal limits, cycle detection, and fan-out controls help prevent excessively large or repetitive searches.
-
-
-
-\*\*Implementation status:\*\* These notes describe the algorithms required by the assessment. Their actual use, parameter settings, and evaluation results must be documented after the corresponding pipeline stages are implemented.
-
-
-
-## 7. Disclosures and Third-Party Components
-
-
-
-### 7.1 Software and Libraries
-
-
-
-The project uses open-source software and libraries, including Python, Elasticsearch, Kibana, GeoServer, Ollama, Docker, GeoPandas, NumPy, NetworkX, PyProj, scikit-learn, Sentence Transformers, Shapely, Streamlit, and PyTorch. Exact Python dependency versions are recorded in `requirements.txt`.
-
-
-
-### 7.2 Models
-
-
-
-The following models were used for local testing:
-
-
-
-- `qwen2.5:3b` for local language generation.
-
-- `sentence-transformers/all-MiniLM-L6-v2` for embeddings.
-
-- `intfloat/e5-small-v2` for embeddings.
-
-- `cross-encoder/ms-marco-MiniLM-L-6-v2` for reranking.
-
-
-
-These were selected as alternatives because the supplied model identifiers were not available in the assessment materials reviewed during setup. This substitution should be confirmed against the assessor's instructions before final submission.
-
-
-
-### 7.3 Geospatial Data
-
-
-
-The school GeoPackage was inspected using GeoPandas. Roads and land-use layers were derived from OpenStreetMap data obtained through Geofabrik because separate assessment files for those layers were unavailable during setup.
-
-
-
-The use of these substitute datasets must be disclosed, including their source and any relevant attribution requirements.
-
-
-
-### 7.4 Development Assistance
-
-
-
-AI assistance was used for environment setup, troubleshooting, command guidance, and drafting documentation. The submitted implementation, evaluation code, and algorithm choices must be reviewed and understood by the project author, who must be able to explain and modify them during the assessment.
-
-
-
-### 7.5 Security and Reproducibility
-
-
-
-No passwords, API-key secrets, or personal credentials should be included in the submitted files. Secrets are kept in environment variables or `.env`, and `.env` is excluded from Git tracking.
-
-
-
-The project must be accompanied by the pinned dependency list, startup instructions, evaluation results, and other artifacts needed to reproduce the completed implementation.
-
-
-
-## 8. References
-
-
-
-- The supplied \*Problem Statement for Intern Assessment: AI/ML RAG \& LLM App Development\*.
-
-- Official documentation for the software, libraries, and models used.
-
-- OpenStreetMap and Geofabrik documentation and attribution requirements for the substituted geospatial datasets.
-
-
-
-
-## 9. Task 8 â€” Pipeline, Safety, and Interface
-
-### 9.1 End-to-End Pipeline
-Implemented `app/pipeline.py` to connect entity extraction, hybrid retrieval, cross-encoder reranking, confidence signals, and local LLM generation using Ollama.
-
-The pipeline returns a structured JSON response containing the answer, citations, confidence, entities used, graph paths, and settings.
-
-### 9.2 Grounded Generation and Citations
-The generation prompt instructs the model to use only retrieved sources and treat their contents as untrusted data. The response is parsed as JSON, and citation IDs are checked against the retrieved chunk IDs. Invalid citations cause the response to abstain.
-
-### 9.3 Abstention and Safety
-The pipeline abstains when no candidates are available or confidence falls below the configured fallback threshold. Requests matching basic rules for data modification or secret disclosure are rejected.
-
-The current threshold of 0.5 is a temporary fallback, not a calibrated threshold. Calibration could not be completed because labeled calibration questions are unavailable.
-
-### 9.4 Smoke Test
-A test question, "What is the East India Geo-Assistant assessment?", returned an answer describing the assessment and cited retrieved chunk `e51f23cd53fdb6ee8188`.
-
-The returned confidence was approximately 0.998. This value is uncalibrated and must not be interpreted as a verified probability of correctness.
-
-### 9.5 Interface
-The Streamlit interface is implemented in `app/ui.py`. It displays the answer, confidence, citations, entities, graph paths, and pipeline settings. Verify the interface manually before recording the UI test as passed.
-
-### 9.6 Evaluation Status
-The current text corpus contains 39 chunks from the assessment PDF. No valid development questions, calibration questions, or labeled retrieval judgments are available. Therefore, a valid ten-question accuracy evaluation, calibrated confidence evaluation, and before-and-after failure analysis have not been completed.
-
-The current graph contains spatial school-road proximity relations. Graph expansion is not yet integrated into retrieval.
-
+- Problem statement: *Intern Assessment: AI/ML RAG & LLM App Development*.
+- Official documentation of the software, libraries and models above.
+- OpenStreetMap and Geofabrik documentation.
