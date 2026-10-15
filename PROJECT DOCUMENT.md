@@ -58,80 +58,42 @@ The system uses Elasticsearch for indexing and retrieval, a locally running lang
 
 ### 2.1 Software Environment
 
-
-
 | Component | Version / Configuration |
-
 |---|---|
-
 | Operating system | Windows |
-
 | Python | 3.12.10 |
-
 | Elasticsearch | 8.19.0 |
-
 | Kibana | 8.19.0 |
-
 | GeoServer | 3.0.1 |
-
 | Ollama | 0.40.4 |
-
 | Docker Engine | 29.8.2 |
-
 | Docker Desktop | 4.94.0 |
-
 | Python environment | `.venv` |
-
 | Elasticsearch JVM heap | 1 GB initial and maximum heap |
-
-
 
 ### 2.2 Local Language Model
 
-
-
 | Property | Value |
-
 |---|---|
-
 | Model | `qwen2.5:3b` |
-
 | Parameter count | Approximately 3 billion |
-
-| Quantisation | Q4\_K\_M |
-
+| Quantisation | Q4_K_M |
 | Context length | 32,768 tokens (model configuration) |
-
 | Active context during test | 4,096 tokens |
-
 | Model size | Approximately 2.2 GB |
-
 | Generation speed | Approximately 16.43 tokens/second |
-
 | Prompt evaluation speed | Approximately 55.26 tokens/second |
-
 | Execution | Local through Ollama, CPU |
-
-
 
 The model was tested with the internet disconnected to verify that local inference works without an external AI API.
 
-
-
 ### 2.3 Embedding and Reranking Models
 
-
-
 | Model | Purpose | Output |
-
 |---|---|---|
-
 | `sentence-transformers/all-MiniLM-L6-v2` | Text embeddings | 384-dimensional vectors |
-
 | `intfloat/e5-small-v2` | Text embeddings | 384-dimensional vectors |
-
 | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Reranking | Raw relevance score |
-
 
 
 The models loaded successfully in Python. The cross-encoder test returned a score of `-9.120125`. This is a raw score, not a calibrated probability.
