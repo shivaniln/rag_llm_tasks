@@ -1,0 +1,24 @@
+{
+  "mappings": {
+    "properties": {
+      "entity_id": {"type": "keyword"},
+      "type": {"type": "keyword"},
+      "name": {
+        "type": "text",
+        "fields": {"keyword": {"type": "keyword"}}
+      },
+      "date": {"type": "date"},
+      "quantity": {"type": "integer"},
+      "osm_id": {"type": "keyword"},
+      "location": {"type": "geo_point"},
+      "mentions": {
+        "type": "nested",
+        "properties": {
+          "chunk_id": {"type": "keyword"},
+          "start": {"type": "integer"},
+          "end": {"type": "integer"}
+        }
+      }
+    }
+  }
+}

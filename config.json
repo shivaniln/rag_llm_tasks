@@ -1,0 +1,31 @@
+{
+  "confidence_features": [
+    "p_top",
+    "margin",
+    "agree",
+    "lp"
+  ],
+  "logistic_regression_C": 0.5,
+  "temperature_grid": [
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5,
+    1.75,
+    2.0,
+    2.25,
+    2.5,
+    2.75,
+    3.0
+  ],
+  "abstention_threshold": null,
+  "abstention_status": "not_calibrated_missing_labels",
+  "answer_sampling_temperatures": [
+    0,
+    0.3,
+    0.7
+  ],
+  "answer_sampling_top_p": 0.9,
+  "answer_sampling_top_k": 40
+}

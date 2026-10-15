@@ -1,0 +1,62 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "english_analyzer": {
+          "type": "english"
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "chunk_id": {
+        "type": "keyword"
+      },
+      "doc": {
+        "type": "keyword"
+      },
+      "page": {
+        "type": "integer"
+      },
+      "char_start": {
+        "type": "integer"
+      },
+      "char_end": {
+        "type": "integer"
+      },
+      "doc_type": {
+        "type": "keyword"
+      },
+      "board": {
+        "type": "keyword"
+      },
+      "date": {
+        "type": "date"
+      },
+      "text": {
+        "type": "text",
+        "analyzer": "english_analyzer"
+      },
+      "entity_ids": {
+        "type": "keyword"
+      },
+      "embedding_model": {
+        "type": "keyword"
+      },
+      "embedding": {
+        "type": "dense_vector",
+        "dims": 384,
+        "index": true,
+        "similarity": "cosine",
+        "index_options": {
+          "type": "hnsw",
+          "m": 16,
+          "ef_construction": 100
+        }
+      }
+    }
+  }
+}
